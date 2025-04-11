@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,14 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Custom roofing company colors
+				roofing: {
+					navy: '#1A365D',
+					slate: '#4A5568',
+					terracotta: '#C05621',
+					orange: '#ED8936',
+					lightGray: '#EDF2F7',
 				}
 			},
 			borderRadius: {
