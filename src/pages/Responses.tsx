@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import ResponseTemplates from '@/components/dashboard/ResponseTemplates';
+import ResponseTemplates from '@/components/dashboard/response-templates';
 import FollowUpTracker from '@/components/dashboard/FollowUpTracker';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
