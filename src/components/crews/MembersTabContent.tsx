@@ -4,12 +4,34 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Phone, Mail, Users } from 'lucide-react';
 import { CrewMember } from '@/types/crews';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface MembersTabContentProps {
   members: CrewMember[];
+  isLoading?: boolean;
+  onEditMember?: (memberId: string, crewId: string) => void;
+  onRefresh?: () => void;
 }
 
-export default function MembersTabContent({ members }: MembersTabContentProps) {
+export default function MembersTabContent({ members, isLoading, onEditMember, onRefresh }: MembersTabContentProps) {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>All Crew Members</CardTitle>
+          <CardDescription>Manage individual crew members and their assignments</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-[80px] w-full" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
   return (
     <Card>
       <CardHeader>
@@ -47,7 +69,13 @@ export default function MembersTabContent({ members }: MembersTabContentProps) {
               
               <div className="flex justify-center sm:justify-end space-x-2">
                 <Button size="sm" variant="outline">View</Button>
-                <Button size="sm" variant="outline">Edit</Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => onEditMember && onEditMember(member.id, member.crew_id)}
+                >
+                  Edit
+                </Button>
               </div>
             </div>
           ))}

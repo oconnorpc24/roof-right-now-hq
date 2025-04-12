@@ -1,20 +1,24 @@
 
 export interface CrewMember {
-  id: number;
+  id: string;
   name: string;
   role: string;
-  avatar: string;
   crew: string;
+  crew_id: string;
   phone: string;
   email: string;
   address: string;
+  notes?: string;
+  created_at?: string;
 }
 
 export interface Crew {
-  id: number;
+  id: string;
   name: string;
-  members: CrewMember[];
-  specialties: string[];
+  members?: CrewMember[];
+  specialties?: string[];
   status: string;
-  currentJob: string;
+  current_job?: string;
+  notes?: string;
+  created_at?: string;
 }

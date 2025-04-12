@@ -198,7 +198,7 @@ export default function Schedule() {
   // Fetch schedule events
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['schedule'],
-    queryFn: scheduleApi.getEvents,
+    queryFn: () => scheduleApi.getEvents(),
   });
 
   // Add event mutation
