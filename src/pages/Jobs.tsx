@@ -1,64 +1,19 @@
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FileText, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-
-// Demo data
-const demoJobs = [
-  { 
-    id: '1',
-    title: 'Roof Replacement',
-    client: 'John Smith',
-    address: '123 Main St, Anytown, USA',
-    date: '2025-04-15',
-    status: 'scheduled',
-    crew: 'Team Alpha',
-    notes: 'Complete tearoff and replacement with architectural shingles'
-  },
-  { 
-    id: '2',
-    title: 'Leak Repair',
-    client: 'Sarah Johnson',
-    address: '456 Oak Ave, Somewhere, USA',
-    date: '2025-04-18',
-    status: 'in-progress',
-    crew: 'Team Beta',
-    notes: 'Locate and repair leak near chimney flashing'
-  },
-  { 
-    id: '3',
-    title: 'Gutter Installation',
-    client: 'Robert Davis',
-    address: '789 Elm St, Nowhere, USA',
-    date: '2025-04-20',
-    status: 'completed',
-    crew: 'Team Alpha',
-    notes: 'Install new seamless gutters and downspouts'
-  },
-  { 
-    id: '4',
-    title: 'Roof Inspection',
-    client: 'Emily Wilson',
-    address: '101 Pine Rd, Somewhere, USA',
-    date: '2025-04-22',
-    status: 'pending',
-    crew: 'Team Delta',
-    notes: 'Annual roof inspection and maintenance check'
-  },
-  { 
-    id: '5',
-    title: 'Skylight Installation',
-    client: 'Michael Brown',
-    address: '202 Cedar Ln, Anytown, USA',
-    date: '2025-04-25',
-    status: 'scheduled',
-    crew: 'Team Charlie',
-    notes: 'Install two 2x4 skylights on north-facing roof'
-  }
-];
+import { jobsApi } from '@/services/api';
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 
 // Status badge component
 const StatusBadge = ({ status }: { status: string }) => {
@@ -79,16 +34,205 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
+// Job form component
+const JobForm = ({ onSubmit, initialData }: { onSubmit: (data: any) => void, initialData?: any }) => {
+  const [formData, setFormData] = useState({
+    title: initialData?.title || '',
+    client: initialData?.client || '',
+    address: initialData?.address || '',
+    date: initialData?.scheduled_date ? new Date(initialData.scheduled_date).toISOString().split('T')[0] : '',
+    status: initialData?.status || 'pending',
+    crew_id: initialData?.crew_id || '',
+    notes: initialData?.notes || ''
+  });
+
+  const { data: crews } = useQuery({
+    queryKey: ['crews'],
+    queryFn: () => import('@/services/api').then(module => module.crewsApi.getCrews()),
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      ...formData,
+      scheduled_date: formData.date
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="title">Job Title</Label>
+        <Input 
+          id="title" 
+          name="title" 
+          value={formData.title} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="client">Client Name</Label>
+        <Input 
+          id="client" 
+          name="client" 
+          value={formData.client} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="address">Address</Label>
+        <Input 
+          id="address" 
+          name="address" 
+          value={formData.address} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="date">Scheduled Date</Label>
+        <Input 
+          id="date" 
+          name="date" 
+          type="date" 
+          value={formData.date} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="status">Status</Label>
+        <Select 
+          value={formData.status} 
+          onValueChange={(value) => handleSelectChange('status', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+            <SelectItem value="in-progress">In Progress</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="crew">Assign Crew</Label>
+        <Select 
+          value={formData.crew_id || ''} 
+          onValueChange={(value) => handleSelectChange('crew_id', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select a crew" />
+          </SelectTrigger>
+          <SelectContent>
+            {crews?.map((crew: any) => (
+              <SelectItem key={crew.id} value={crew.id}>
+                {crew.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="notes">Notes</Label>
+        <Textarea 
+          id="notes" 
+          name="notes" 
+          value={formData.notes} 
+          onChange={handleChange} 
+        />
+      </div>
+
+      <Button type="submit" className="w-full">
+        {initialData ? 'Update Job' : 'Create Job'}
+      </Button>
+    </form>
+  );
+};
+
 export default function Jobs() {
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Fetch jobs
+  const { data: jobs, isLoading, error } = useQuery({
+    queryKey: ['jobs'],
+    queryFn: jobsApi.getJobs,
+  });
+
+  // Add job mutation
+  const addJobMutation = useMutation({
+    mutationFn: jobsApi.createJob,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      setIsAddDialogOpen(false);
+      toast.success('Job added successfully');
+    },
+  });
+
+  const handleAddJob = (data: any) => {
+    addJobMutation.mutate(data);
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex justify-center items-center h-[calc(100vh-200px)]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-10">
+          <h2 className="text-xl font-semibold text-destructive">Error loading jobs</h2>
+          <p className="text-muted-foreground">Please try again later</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
-          <Button>
-            <FileText className="mr-2 h-4 w-4" />
-            Add New Job
-          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <FileText className="mr-2 h-4 w-4" />
+                Add New Job
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Add New Job</DialogTitle>
+              </DialogHeader>
+              <JobForm onSubmit={handleAddJob} />
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Card>
@@ -108,26 +252,38 @@ export default function Jobs() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {demoJobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell>
-                      <div className="font-medium">{job.title}</div>
-                      <div className="text-sm text-muted-foreground">{job.address}</div>
-                    </TableCell>
-                    <TableCell>{job.client}</TableCell>
-                    <TableCell>{new Date(job.date).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={job.status} />
-                    </TableCell>
-                    <TableCell>{job.crew}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm">View</Button>
-                        <Button variant="outline" size="sm">Edit</Button>
+                {jobs && jobs.length > 0 ? (
+                  jobs.map((job: any) => (
+                    <TableRow key={job.id}>
+                      <TableCell>
+                        <div className="font-medium">{job.title}</div>
+                        <div className="text-sm text-muted-foreground">{job.address}</div>
+                      </TableCell>
+                      <TableCell>{job.client}</TableCell>
+                      <TableCell>{job.scheduled_date ? new Date(job.scheduled_date).toLocaleDateString() : 'Not scheduled'}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={job.status || 'pending'} />
+                      </TableCell>
+                      <TableCell>{job.crews?.name || 'Unassigned'}</TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button variant="outline" size="sm">View</Button>
+                          <Button variant="outline" size="sm">Edit</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-10">
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                        <FileText className="h-10 w-10 text-muted-foreground" />
+                        <div className="text-lg font-medium">No jobs found</div>
+                        <p className="text-sm text-muted-foreground">Get started by creating a new job</p>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </CardContent>
