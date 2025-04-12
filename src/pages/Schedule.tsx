@@ -24,8 +24,8 @@ const ScheduleEventForm = ({ onSubmit, initialData }: { onSubmit: (data: any) =>
     start_date: initialData?.start_date ? format(new Date(initialData.start_date), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     end_date: initialData?.end_date ? format(new Date(initialData.end_date), "yyyy-MM-dd'T'HH:mm") : format(new Date(new Date().getTime() + 3 * 60 * 60 * 1000), "yyyy-MM-dd'T'HH:mm"),
     all_day: initialData?.all_day || false,
-    job_id: initialData?.job_id || '',
-    crew_id: initialData?.crew_id || '',
+    job_id: initialData?.job_id || 'none',
+    crew_id: initialData?.crew_id || 'none',
     status: initialData?.status || 'scheduled'
   });
 
@@ -56,7 +56,10 @@ const ScheduleEventForm = ({ onSubmit, initialData }: { onSubmit: (data: any) =>
     e.preventDefault();
     onSubmit({
       ...formData,
-      id: initialData?.id
+      id: initialData?.id,
+      // Convert 'none' back to null for the backend
+      job_id: formData.job_id === 'none' ? null : formData.job_id,
+      crew_id: formData.crew_id === 'none' ? null : formData.crew_id
     });
   };
 
@@ -86,14 +89,14 @@ const ScheduleEventForm = ({ onSubmit, initialData }: { onSubmit: (data: any) =>
       <div className="space-y-2">
         <Label htmlFor="job_id">Related Job (Optional)</Label>
         <Select 
-          value={formData.job_id || ''} 
+          value={formData.job_id} 
           onValueChange={(value) => handleSelectChange('job_id', value)}
         >
           <SelectTrigger>
             <SelectValue placeholder="Select a job" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">None</SelectItem>
+            <SelectItem value="none">None</SelectItem>
             {jobs?.map((job: any) => (
               <SelectItem key={job.id} value={job.id}>
                 {job.title} - {job.client}
@@ -146,14 +149,14 @@ const ScheduleEventForm = ({ onSubmit, initialData }: { onSubmit: (data: any) =>
       <div className="space-y-2">
         <Label htmlFor="crew_id">Assign Crew</Label>
         <Select 
-          value={formData.crew_id || ''} 
+          value={formData.crew_id} 
           onValueChange={(value) => handleSelectChange('crew_id', value)}
         >
           <SelectTrigger>
             <SelectValue placeholder="Select a crew" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">None</SelectItem>
+            <SelectItem value="none">None</SelectItem>
             {crews?.map((crew: any) => (
               <SelectItem key={crew.id} value={crew.id}>
                 {crew.name}
