@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-import { jobsApi } from '@/services/api';
+import { FileText, AlertCircle, CheckCircle, Clock, Calendar, Edit, Trash } from 'lucide-react';
+import { jobsApi, scheduleApi } from '@/services/api';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 
 // Status badge component
 const StatusBadge = ({ status }: { status: string }) => {
@@ -169,8 +170,139 @@ const JobForm = ({ onSubmit, initialData }: { onSubmit: (data: any) => void, ini
   );
 };
 
+// Schedule form component
+const ScheduleJobForm = ({ job, onSubmit }: { job: any, onSubmit: (data: any) => void }) => {
+  const jobDate = job.scheduled_date ? new Date(job.scheduled_date) : new Date();
+  
+  const [formData, setFormData] = useState({
+    title: job.title || '',
+    description: '',
+    start_date: format(jobDate, "yyyy-MM-dd'T'HH:mm"),
+    end_date: format(new Date(jobDate.getTime() + 3 * 60 * 60 * 1000), "yyyy-MM-dd'T'HH:mm"),
+    all_day: false,
+    status: 'scheduled',
+    crew_id: job.crew_id || ''
+  });
+
+  const { data: crews } = useQuery({
+    queryKey: ['crews'],
+    queryFn: () => import('@/services/api').then(module => module.crewsApi.getCrews()),
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type, checked } = e.target as HTMLInputElement;
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: type === 'checkbox' ? checked : value 
+    }));
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      ...formData,
+      job_id: job.id
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="title">Event Title</Label>
+        <Input 
+          id="title" 
+          name="title" 
+          value={formData.title} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">Description</Label>
+        <Textarea 
+          id="description" 
+          name="description" 
+          value={formData.description} 
+          onChange={handleChange} 
+        />
+      </div>
+
+      <div className="flex items-center space-x-2 mb-4">
+        <input
+          type="checkbox"
+          id="all_day"
+          name="all_day"
+          checked={formData.all_day}
+          onChange={handleChange}
+          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+        />
+        <Label htmlFor="all_day" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          All Day Event
+        </Label>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="start_date">Start Date/Time</Label>
+          <Input 
+            id="start_date" 
+            name="start_date" 
+            type="datetime-local" 
+            value={formData.start_date} 
+            onChange={handleChange} 
+            required 
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="end_date">End Date/Time</Label>
+          <Input 
+            id="end_date" 
+            name="end_date" 
+            type="datetime-local" 
+            value={formData.end_date} 
+            onChange={handleChange} 
+            required 
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="crew">Assign Crew</Label>
+        <Select 
+          value={formData.crew_id || ''} 
+          onValueChange={(value) => handleSelectChange('crew_id', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select a crew" />
+          </SelectTrigger>
+          <SelectContent>
+            {crews?.map((crew: any) => (
+              <SelectItem key={crew.id} value={crew.id}>
+                {crew.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Button type="submit" className="w-full">
+        Add to Schedule
+      </Button>
+    </form>
+  );
+};
+
 export default function Jobs() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<any>(null);
   const queryClient = useQueryClient();
 
   // Fetch jobs
@@ -189,8 +321,52 @@ export default function Jobs() {
     },
   });
 
+  // Edit job mutation
+  const editJobMutation = useMutation({
+    mutationFn: (job: any) => jobsApi.updateJob(job.id, job),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      setIsEditDialogOpen(false);
+      toast.success('Job updated successfully');
+    },
+  });
+
+  // Delete job mutation
+  const deleteJobMutation = useMutation({
+    mutationFn: jobsApi.deleteJob,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      toast.success('Job deleted successfully');
+    },
+  });
+
+  // Schedule job mutation
+  const scheduleJobMutation = useMutation({
+    mutationFn: scheduleApi.createEvent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
+      setIsScheduleDialogOpen(false);
+      toast.success('Job added to schedule successfully');
+    },
+  });
+
   const handleAddJob = (data: any) => {
     addJobMutation.mutate(data);
+  };
+
+  const handleEditJob = (data: any) => {
+    editJobMutation.mutate({ ...data, id: selectedJob.id });
+  };
+
+  const handleDeleteJob = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this job?')) {
+      deleteJobMutation.mutate(id);
+    }
+  };
+
+  const handleScheduleJob = (data: any) => {
+    scheduleJobMutation.mutate(data);
   };
 
   if (isLoading) {
@@ -266,9 +442,37 @@ export default function Jobs() {
                       </TableCell>
                       <TableCell>{job.crews?.name || 'Unassigned'}</TableCell>
                       <TableCell>
-                        <div className="flex space-x-2">
-                          <Button variant="outline" size="sm">View</Button>
-                          <Button variant="outline" size="sm">Edit</Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              setSelectedJob(job);
+                              setIsScheduleDialogOpen(true);
+                            }}
+                          >
+                            <Calendar className="h-4 w-4 mr-1" />
+                            Schedule
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              setSelectedJob(job);
+                              setIsEditDialogOpen(true);
+                            }}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDeleteJob(job.id)}
+                          >
+                            <Trash className="h-4 w-4 mr-1" />
+                            Delete
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -289,6 +493,30 @@ export default function Jobs() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Job Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Job</DialogTitle>
+          </DialogHeader>
+          {selectedJob && (
+            <JobForm onSubmit={handleEditJob} initialData={selectedJob} />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Job Dialog */}
+      <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Add Job to Schedule</DialogTitle>
+          </DialogHeader>
+          {selectedJob && (
+            <ScheduleJobForm job={selectedJob} onSubmit={handleScheduleJob} />
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

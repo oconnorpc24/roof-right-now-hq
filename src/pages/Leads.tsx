@@ -37,10 +37,12 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { FilterX, Plus, Search, MoreHorizontal, Phone, Mail } from 'lucide-react';
+import { FilterX, Plus, Search, MoreHorizontal, Phone, Mail, Edit, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { leadsApi } from '@/services/api';
 
-// Lead type definition (same as in LeadsList.tsx)
+// Lead type definition
 const leadStatusColors = {
   new: "bg-blue-100 text-blue-800",
   contacted: "bg-yellow-100 text-yellow-800",
@@ -51,118 +53,195 @@ const leadStatusColors = {
 
 type LeadStatus = keyof typeof leadStatusColors;
 
-interface Lead {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  status: LeadStatus;
-  date: string;
-  source: string;
-  notes?: string;
-}
+// Lead form component
+const LeadForm = ({ onSubmit, initialData }: { onSubmit: (data: any) => void, initialData?: any }) => {
+  const [formData, setFormData] = useState({
+    name: initialData?.name || '',
+    email: initialData?.email || '',
+    phone: initialData?.phone || '',
+    address: initialData?.address || '',
+    status: initialData?.status || 'new',
+    source: initialData?.source || '',
+    notes: initialData?.notes || ''
+  });
 
-// Extended demo data
-const demoLeads: Lead[] = [
-  {
-    id: '1',
-    name: 'John Smith',
-    email: 'john.smith@example.com',
-    phone: '(555) 123-4567',
-    address: '123 Main St, Anytown, USA',
-    status: 'new',
-    date: '2025-04-10',
-    source: 'Website',
-    notes: 'Interested in a full roof replacement. Currently has asphalt shingles that are about 20 years old.'
-  },
-  {
-    id: '2',
-    name: 'Sarah Johnson',
-    email: 'sarah.j@example.com',
-    phone: '(555) 234-5678',
-    address: '456 Oak Ave, Somewhere, USA',
-    status: 'contacted',
-    date: '2025-04-09', 
-    source: 'Referral',
-    notes: 'Referred by Michael Brown. Needs roof repair due to recent storm damage.'
-  },
-  {
-    id: '3',
-    name: 'Michael Brown',
-    email: 'mbrown@example.com',
-    phone: '(555) 345-6789',
-    address: '789 Pine Rd, Nowhere, USA',
-    status: 'qualified',
-    date: '2025-04-08',
-    source: 'Google Ads',
-    notes: 'Previous customer, now interested in gutter replacement.'
-  },
-  {
-    id: '4',
-    name: 'Emma Davis',
-    email: 'emma.d@example.com',
-    phone: '(555) 456-7890',
-    address: '321 Elm St, Elsewhere, USA',
-    status: 'new',
-    date: '2025-04-07',
-    source: 'Facebook'
-  },
-  {
-    id: '5',
-    name: 'David Wilson',
-    email: 'dwilson@example.com',
-    phone: '(555) 567-8901',
-    address: '654 Maple Dr, Anywhere, USA',
-    status: 'contacted',
-    date: '2025-04-06',
-    source: 'Instagram'
-  },
-  {
-    id: '6',
-    name: 'Jennifer Garcia',
-    email: 'jgarcia@example.com',
-    phone: '(555) 678-9012',
-    address: '987 Cedar Ln, Everywhere, USA',
-    status: 'qualified',
-    date: '2025-04-05',
-    source: 'Website'
-  },
-  {
-    id: '7',
-    name: 'Robert Martinez',
-    email: 'rmartinez@example.com',
-    phone: '(555) 789-0123',
-    address: '159 Birch Blvd, Someplace, USA',
-    status: 'closed',
-    date: '2025-04-04',
-    source: 'Referral'
-  },
-  {
-    id: '8',
-    name: 'Lisa Taylor',
-    email: 'ltaylor@example.com',
-    phone: '(555) 890-1234',
-    address: '753 Spruce St, Othertown, USA',
-    status: 'lost',
-    date: '2025-04-03',
-    source: 'Home Show'
-  }
-];
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  const sources = [
+    'Website', 'Referral', 'Google Ads', 'Facebook', 'Instagram', 'Home Show', 'Direct Mail', 'Other'
+  ];
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name *</Label>
+          <Input 
+            id="name" 
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            placeholder="Full name" 
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="source">Source *</Label>
+          <Select
+            value={formData.source}
+            onValueChange={(value) => handleSelectChange('source', value)}
+          >
+            <SelectTrigger id="source">
+              <SelectValue placeholder="Select source" />
+            </SelectTrigger>
+            <SelectContent>
+              {sources.map(source => (
+                <SelectItem key={source} value={source}>{source}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input 
+            id="email" 
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            type="email" 
+            placeholder="Email address" 
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="phone">Phone</Label>
+          <Input 
+            id="phone" 
+            name="phone"
+            value={formData.phone}
+            onChange={handleChange}
+            placeholder="Phone number" 
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="address">Address</Label>
+        <Input 
+          id="address" 
+          name="address"
+          value={formData.address}
+          onChange={handleChange}
+          placeholder="Full address" 
+        />
+      </div>
+      {initialData && (
+        <div className="space-y-2">
+          <Label htmlFor="status">Status</Label>
+          <Select
+            value={formData.status}
+            onValueChange={(value) => handleSelectChange('status', value)}
+          >
+            <SelectTrigger id="status">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">New</SelectItem>
+              <SelectItem value="contacted">Contacted</SelectItem>
+              <SelectItem value="qualified">Qualified</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+              <SelectItem value="lost">Lost</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor="notes">Notes</Label>
+        <Textarea 
+          id="notes" 
+          name="notes"
+          value={formData.notes}
+          onChange={handleChange}
+          placeholder="Additional information about the lead" 
+        />
+      </div>
+      <DialogFooter>
+        <Button type="submit">{initialData ? 'Update Lead' : 'Save Lead'}</Button>
+      </DialogFooter>
+    </form>
+  );
+};
 
 const Leads = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [editLeadOpen, setEditLeadOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  
+  const queryClient = useQueryClient();
+  
+  // Fetch leads
+  const { data: leads = [], isLoading } = useQuery({
+    queryKey: ['leads'],
+    queryFn: leadsApi.getLeads,
+  });
+  
+  // Add lead mutation
+  const addLeadMutation = useMutation({
+    mutationFn: leadsApi.createLead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      setAddLeadOpen(false);
+    },
+  });
+  
+  // Update lead mutation
+  const updateLeadMutation = useMutation({
+    mutationFn: (lead: any) => leadsApi.updateLead(lead.id, lead),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      setEditLeadOpen(false);
+    },
+  });
+  
+  // Delete lead mutation
+  const deleteLeadMutation = useMutation({
+    mutationFn: leadsApi.deleteLead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
+  
+  // Update lead status mutation
+  const updateLeadStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string, status: string }) => 
+      leadsApi.updateLead(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
   
   // Filter leads based on search terms and filters
-  const filteredLeads = demoLeads.filter(lead => {
+  const filteredLeads = leads.filter((lead: any) => {
     const matchesSearch = 
-      lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.phone.includes(searchTerm);
+      (lead.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (lead.address?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (lead.phone?.includes(searchTerm) || false);
       
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
     const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter;
@@ -177,7 +256,51 @@ const Leads = () => {
   };
   
   // Get unique sources for filter options
-  const sources = ['all', ...new Set(demoLeads.map(lead => lead.source))];
+  const sources = ['all', ...new Set(leads.map((lead: any) => lead.source).filter(Boolean))];
+
+  const handleAddLead = (leadData: any) => {
+    addLeadMutation.mutate(leadData);
+  };
+
+  const handleUpdateLead = (leadData: any) => {
+    updateLeadMutation.mutate({ ...leadData, id: selectedLead.id });
+  };
+
+  const handleDeleteLead = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this lead?')) {
+      deleteLeadMutation.mutate(id);
+    }
+  };
+
+  const handleUpdateLeadStatus = (id: string, currentStatus: string) => {
+    let newStatus: string;
+    
+    switch (currentStatus) {
+      case 'new':
+        newStatus = 'contacted';
+        break;
+      case 'contacted':
+        newStatus = 'qualified';
+        break;
+      case 'qualified':
+        newStatus = 'closed';
+        break;
+      default:
+        newStatus = 'new';
+    }
+    
+    updateLeadStatusMutation.mutate({ id, status: newStatus });
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex justify-center items-center h-[calc(100vh-200px)]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
   
   return (
     <DashboardLayout>
@@ -198,52 +321,7 @@ const Leads = () => {
                   Enter the details of the new lead. All fields marked with * are required.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name *</Label>
-                    <Input id="name" placeholder="Full name" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="source">Source *</Label>
-                    <Select>
-                      <SelectTrigger id="source">
-                        <SelectValue placeholder="Select source" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Website">Website</SelectItem>
-                        <SelectItem value="Referral">Referral</SelectItem>
-                        <SelectItem value="Google Ads">Google Ads</SelectItem>
-                        <SelectItem value="Facebook">Facebook</SelectItem>
-                        <SelectItem value="Instagram">Instagram</SelectItem>
-                        <SelectItem value="Home Show">Home Show</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email *</Label>
-                    <Input id="email" type="email" placeholder="Email address" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone *</Label>
-                    <Input id="phone" placeholder="Phone number" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address *</Label>
-                  <Input id="address" placeholder="Full address" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea id="notes" placeholder="Additional information about the lead" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setAddLeadOpen(false)}>Cancel</Button>
-                <Button type="submit">Save Lead</Button>
-              </DialogFooter>
+              <LeadForm onSubmit={handleAddLead} />
             </DialogContent>
           </Dialog>
         </div>
@@ -311,7 +389,7 @@ const Leads = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredLeads.length > 0 ? (
-                    filteredLeads.map((lead) => (
+                    filteredLeads.map((lead: any) => (
                       <TableRow key={lead.id}>
                         <TableCell>
                           <div>
@@ -323,21 +401,21 @@ const Leads = () => {
                           <div className="flex flex-col space-y-1">
                             <div className="flex items-center text-sm">
                               <Phone className="mr-1 h-3 w-3" />
-                              <span>{lead.phone}</span>
+                              <span>{lead.phone || 'No phone'}</span>
                             </div>
                             <div className="flex items-center text-sm">
                               <Mail className="mr-1 h-3 w-3" />
-                              <span>{lead.email}</span>
+                              <span>{lead.email || 'No email'}</span>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={cn("rounded-full font-normal", leadStatusColors[lead.status])}>
-                            {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                          <Badge className={cn("rounded-full font-normal", leadStatusColors[lead.status as LeadStatus])}>
+                            {lead.status ? lead.status.charAt(0).toUpperCase() + lead.status.slice(1) : 'New'}
                           </Badge>
                         </TableCell>
-                        <TableCell>{lead.source}</TableCell>
-                        <TableCell>{new Date(lead.date).toLocaleDateString()}</TableCell>
+                        <TableCell>{lead.source || 'Unknown'}</TableCell>
+                        <TableCell>{new Date(lead.created_at).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -346,10 +424,18 @@ const Leads = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>View Details</DropdownMenuItem>
-                              <DropdownMenuItem>Edit Lead</DropdownMenuItem>
-                              <DropdownMenuItem>Create Quote</DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedLead(lead);
+                                setEditLeadOpen(true);
+                              }}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit Lead
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)}>
+                                <Trash className="mr-2 h-4 w-4" />
+                                Delete Lead
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateLeadStatus(lead.id, lead.status)}>
                                 {lead.status === 'new' ? 'Mark as Contacted' : 
                                  lead.status === 'contacted' ? 'Mark as Qualified' : 
                                  lead.status === 'qualified' ? 'Mark as Closed' : 'Change Status'}
@@ -362,7 +448,7 @@ const Leads = () => {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={6} className="h-24 text-center">
-                        No leads found. Try adjusting your filters.
+                        No leads found. Try adjusting your filters or add a new lead.
                       </TableCell>
                     </TableRow>
                   )}
@@ -372,6 +458,21 @@ const Leads = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Lead Dialog */}
+      <Dialog open={editLeadOpen} onOpenChange={setEditLeadOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Lead</DialogTitle>
+            <DialogDescription>
+              Update the lead information.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedLead && (
+            <LeadForm onSubmit={handleUpdateLead} initialData={selectedLead} />
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };

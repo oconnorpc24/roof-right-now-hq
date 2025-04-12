@@ -17,44 +17,13 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { Plus, FileText, FileCheck, Download, Send, Printer } from 'lucide-react';
+import { Plus, FileText, FileCheck, Download, Send, Printer, Edit, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// Demo data for quotes
-const demoQuotes = [
-  {
-    id: '1001',
-    client: 'John Smith',
-    address: '123 Main St, Anytown, USA',
-    date: '2025-04-10',
-    amount: 12540.00,
-    status: 'draft'
-  },
-  {
-    id: '1002',
-    client: 'Sarah Johnson',
-    address: '456 Oak Ave, Somewhere, USA',
-    date: '2025-04-08',
-    amount: 8750.00,
-    status: 'sent'
-  },
-  {
-    id: '1003',
-    client: 'Michael Brown',
-    address: '789 Pine Rd, Nowhere, USA',
-    date: '2025-04-05',
-    amount: 15980.00,
-    status: 'accepted'
-  },
-  {
-    id: '1004',
-    client: 'Jennifer Garcia',
-    address: '987 Cedar Ln, Everywhere, USA',
-    date: '2025-04-03',
-    amount: 9240.00,
-    status: 'draft'
-  }
-];
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { quotesApi, leadsApi, jobsApi } from '@/services/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Status color mappings
 const quoteStatusColors = {
@@ -81,7 +50,138 @@ const roofingMaterials = [
   { label: 'Slate', value: 'slate', pricePerSqFt: 15.00 }
 ];
 
+// Job form for converting quote to job
+const CreateJobForm = ({ quote, onSubmit }: { quote: any, onSubmit: (data: any) => void }) => {
+  const [formData, setFormData] = useState({
+    title: quote.title || '',
+    client: quote.leads?.name || '',
+    address: quote.leads?.address || '',
+    scheduled_date: '',
+    status: 'pending',
+    crew_id: '',
+    notes: quote.notes || '',
+    quote_id: quote.id
+  });
+
+  const { data: crews } = useQuery({
+    queryKey: ['crews'],
+    queryFn: () => import('@/services/api').then(module => module.crewsApi.getCrews()),
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="title">Job Title</Label>
+        <Input 
+          id="title" 
+          name="title" 
+          value={formData.title} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="client">Client Name</Label>
+        <Input 
+          id="client" 
+          name="client" 
+          value={formData.client} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="address">Address</Label>
+        <Input 
+          id="address" 
+          name="address" 
+          value={formData.address} 
+          onChange={handleChange} 
+          required 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="scheduled_date">Scheduled Date</Label>
+        <Input 
+          id="scheduled_date" 
+          name="scheduled_date" 
+          type="date" 
+          value={formData.scheduled_date} 
+          onChange={handleChange} 
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="status">Status</Label>
+        <Select 
+          value={formData.status} 
+          onValueChange={(value) => handleSelectChange('status', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="crew_id">Assign Crew</Label>
+        <Select 
+          value={formData.crew_id} 
+          onValueChange={(value) => handleSelectChange('crew_id', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select a crew" />
+          </SelectTrigger>
+          <SelectContent>
+            {crews?.map((crew: any) => (
+              <SelectItem key={crew.id} value={crew.id}>
+                {crew.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="notes">Notes</Label>
+        <Textarea 
+          id="notes" 
+          name="notes" 
+          value={formData.notes} 
+          onChange={handleChange} 
+        />
+      </div>
+
+      <Button type="submit" className="w-full">
+        Create Job
+      </Button>
+    </form>
+  );
+};
+
 const Quotes = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("existing");
   const [quoteForm, setQuoteForm] = useState({
     clientName: '',
@@ -99,6 +199,43 @@ const Quotes = () => {
     laborCost: 0,
     additionalCosts: 0,
     totalEstimate: 0
+  });
+  const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState<any>(null);
+
+  const queryClient = useQueryClient();
+
+  // Fetch quotes
+  const { data: quotes = [], isLoading: quotesLoading } = useQuery({
+    queryKey: ['quotes'],
+    queryFn: quotesApi.getQuotes,
+  });
+
+  // Fetch leads for dropdown
+  const { data: leads = [] } = useQuery({
+    queryKey: ['leads'],
+    queryFn: leadsApi.getLeads,
+  });
+
+  // Create job mutation
+  const createJobMutation = useMutation({
+    mutationFn: jobsApi.createJob,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['quotes'] });
+      setIsJobDialogOpen(false);
+      toast.success('Job created successfully');
+    },
+  });
+
+  // Update quote status mutation
+  const updateQuoteStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string, status: string }) => 
+      quotesApi.updateQuote(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotes'] });
+      toast.success('Quote status updated');
+    },
   });
 
   // Update quote form and calculate estimate
@@ -137,6 +274,103 @@ const Quotes = () => {
     });
   };
 
+  const handleGenerateQuote = async () => {
+    if (!quoteForm.clientName || !quoteForm.material || !quoteForm.area) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      // Check if we have a lead, or create one
+      let leadId = null;
+      
+      // Try to find existing lead by email if provided
+      if (quoteForm.clientEmail) {
+        const existingLeads = leads.filter((lead: any) => 
+          lead.email === quoteForm.clientEmail
+        );
+        
+        if (existingLeads.length > 0) {
+          leadId = existingLeads[0].id;
+        }
+      }
+      
+      // If no existing lead found, create a new one
+      if (!leadId) {
+        const newLead = await leadsApi.createLead({
+          name: quoteForm.clientName,
+          email: quoteForm.clientEmail,
+          phone: quoteForm.clientPhone,
+          address: quoteForm.address,
+          source: 'Quote Generator',
+          status: 'new'
+        });
+        
+        leadId = newLead.id;
+      }
+      
+      // Create the quote
+      const quoteData = {
+        lead_id: leadId,
+        title: `Roof ${quoteForm.roofType} - ${roofingMaterials.find(m => m.value === quoteForm.material)?.label}`,
+        description: `Roof Type: ${quoteForm.roofType}, Material: ${quoteForm.material}, Area: ${quoteForm.area} sq.ft.`,
+        amount: quoteEstimate.totalEstimate,
+        status: 'draft',
+        notes: quoteForm.notes,
+        created_by: user?.id
+      };
+      
+      await quotesApi.createQuote(quoteData);
+      
+      toast.success('Quote generated successfully');
+      
+      // Reset form and switch to existing quotes tab
+      setQuoteForm({
+        clientName: '',
+        clientEmail: '',
+        clientPhone: '',
+        address: '',
+        roofType: '',
+        material: '',
+        area: '',
+        additionalServices: [],
+        notes: ''
+      });
+      
+      setQuoteEstimate({
+        materialCost: 0,
+        laborCost: 0,
+        additionalCosts: 0,
+        totalEstimate: 0
+      });
+      
+      setActiveTab('existing');
+      queryClient.invalidateQueries({ queryKey: ['quotes'] });
+    } catch (error) {
+      console.error('Error generating quote:', error);
+      toast.error('Failed to generate quote');
+    }
+  };
+
+  const handleSendQuote = (quoteId: string) => {
+    updateQuoteStatusMutation.mutate({ id: quoteId, status: 'sent' });
+  };
+
+  const handleCreateJob = (jobData: any) => {
+    createJobMutation.mutate(jobData);
+    updateQuoteStatusMutation.mutate({ id: jobData.quote_id, status: 'accepted' });
+  };
+
+  if (quotesLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex justify-center items-center h-[calc(100vh-200px)]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -170,47 +404,67 @@ const Quotes = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {demoQuotes.map((quote) => (
-                        <TableRow key={quote.id}>
-                          <TableCell className="font-medium">{quote.id}</TableCell>
-                          <TableCell>
-                            <div>
-                              <div>{quote.client}</div>
-                              <div className="text-sm text-muted-foreground">{quote.address}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{new Date(quote.date).toLocaleDateString()}</TableCell>
-                          <TableCell>${quote.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                          <TableCell>
-                            <Badge className={cn(
-                              "rounded-full font-normal",
-                              quoteStatusColors[quote.status as keyof typeof quoteStatusColors]
-                            )}>
-                              {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end space-x-2">
-                              <Button variant="outline" size="sm">
-                                <FileText className="mr-1 h-4 w-4" />
-                                View
-                              </Button>
-                              {quote.status === 'draft' && (
-                                <Button size="sm">
-                                  <Send className="mr-1 h-4 w-4" />
-                                  Send
+                      {quotes.length > 0 ? (
+                        quotes.map((quote: any) => (
+                          <TableRow key={quote.id}>
+                            <TableCell className="font-medium">
+                              {quote.id.substring(0, 8)}...
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div>{quote.leads?.name || 'Unknown'}</div>
+                                <div className="text-sm text-muted-foreground">{quote.leads?.address || 'No address'}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{new Date(quote.created_at).toLocaleDateString()}</TableCell>
+                            <TableCell>${quote.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                            <TableCell>
+                              <Badge className={cn(
+                                "rounded-full font-normal",
+                                quoteStatusColors[quote.status as keyof typeof quoteStatusColors] || "bg-gray-100 text-gray-800"
+                              )}>
+                                {quote.status ? quote.status.charAt(0).toUpperCase() + quote.status.slice(1) : 'Draft'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end space-x-2">
+                                <Button variant="outline" size="sm">
+                                  <FileText className="mr-1 h-4 w-4" />
+                                  View
                                 </Button>
-                              )}
-                              {quote.status === 'accepted' && (
-                                <Button size="sm" variant="default">
-                                  <FileCheck className="mr-1 h-4 w-4" />
-                                  Convert to Job
-                                </Button>
-                              )}
-                            </div>
+                                {quote.status === 'draft' && (
+                                  <Button 
+                                    size="sm" 
+                                    onClick={() => handleSendQuote(quote.id)}
+                                  >
+                                    <Send className="mr-1 h-4 w-4" />
+                                    Send
+                                  </Button>
+                                )}
+                                {(quote.status === 'sent' || quote.status === 'accepted') && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="default"
+                                    onClick={() => {
+                                      setSelectedQuote(quote);
+                                      setIsJobDialogOpen(true);
+                                    }}
+                                  >
+                                    <FileCheck className="mr-1 h-4 w-4" />
+                                    Convert to Job
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={6} className="h-24 text-center">
+                            No quotes found. Create a new quote to get started.
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -236,6 +490,7 @@ const Quotes = () => {
                           placeholder="Full name" 
                           value={quoteForm.clientName}
                           onChange={(e) => handleQuoteFormChange('clientName', e.target.value)}
+                          required
                         />
                       </div>
                       <div className="space-y-2">
@@ -264,6 +519,7 @@ const Quotes = () => {
                           placeholder="Full address" 
                           value={quoteForm.address}
                           onChange={(e) => handleQuoteFormChange('address', e.target.value)}
+                          required
                         />
                       </div>
                     </div>
@@ -315,6 +571,7 @@ const Quotes = () => {
                           placeholder="Area in square feet" 
                           value={quoteForm.area}
                           onChange={(e) => handleQuoteFormChange('area', e.target.value)}
+                          required
                         />
                       </div>
                     </div>
@@ -363,7 +620,11 @@ const Quotes = () => {
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col space-y-2">
-                  <Button className="w-full">
+                  <Button 
+                    className="w-full"
+                    onClick={handleGenerateQuote}
+                    disabled={!quoteForm.clientName || !quoteForm.material || !quoteForm.area}
+                  >
                     <Plus className="mr-2 h-4 w-4" />
                     Generate Quote
                   </Button>
@@ -383,6 +644,21 @@ const Quotes = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Convert to Job Dialog */}
+      <Dialog open={isJobDialogOpen} onOpenChange={setIsJobDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Convert Quote to Job</DialogTitle>
+          </DialogHeader>
+          {selectedQuote && (
+            <CreateJobForm 
+              quote={selectedQuote} 
+              onSubmit={handleCreateJob} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
