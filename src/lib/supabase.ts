@@ -2,20 +2,17 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 
-// Add fallback values for development - replace these with your actual Supabase project values
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project-url.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
+// Use the actual Supabase project URL and publishable key
+const supabaseUrl = "https://cmhkggqgsfwfntayfaly.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtaGtnZ3Fnc2Z3Zm50YXlmYWx5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0NzQ3OTAsImV4cCI6MjA2MDA1MDc5MH0.l2rO-JgkzFqpRUv4XQIsTMLCx63GBMXyFV1gCxmlvJQ";
 
-// Check if we have required values
-if (!supabaseUrl || supabaseUrl === 'https://your-project-url.supabase.co') {
-  console.error('Missing VITE_SUPABASE_URL environment variable');
-}
-
-if (!supabaseAnonKey || supabaseAnonKey === 'your-anon-key') {
-  console.error('Missing VITE_SUPABASE_ANON_KEY environment variable');
-}
-
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});
 
 export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
 export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T];
