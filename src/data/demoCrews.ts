@@ -153,12 +153,12 @@ export const demoCrews: Crew[] = [
 
 // Demo crew members (all members in a flat array)
 export const demoMembers: CrewMember[] = demoCrews.flatMap(crew => 
-  crew.members!.map(member => ({
+  crew.members?.map(member => ({
     ...member,
     crew: crew.name,
     crew_id: crew.id,
-    phone: member.phone,
-    email: member.email,
-    address: member.address
-  }))
+    phone: member.phone || '',
+    email: member.email || '',
+    address: member.address || ''
+  })) || []
 );
